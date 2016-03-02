@@ -1,4 +1,4 @@
-import unittest
+import unittest, json, codecs
 from reviews import Marvin
 
 class TestDiffParsing(unittest.TestCase):
@@ -23,6 +23,20 @@ class TestDiffParsing(unittest.TestCase):
 		all_changes = Marvin().analyze_diff(diff_path=self.diff_path)
 		file_changes = [x['changes'] for x in all_changes if x['header'].new_path == self.file][0]
 		self.assertListEqual(file_changes, self.result)
+
+class TestPullRequestParsing(unittest.TestCase):
+	def setUp(self):
+		path = '338.json'
+		with codecs.open(path, 'r', encoding='utf-8') as f:
+			self.pr = json.loads(f.read())
+		self.result = {
+			'full_name': 'hpi-swt2/wimi-portal',
+			'clone_url': 'https://github.com/hpi-swt2/wimi-portal.git',
+			'branch': 'feature/288_timesheet'}
+
+	def test_real_pr(self):
+		repo_info = Marvin()._parse_github_pull_request(self.pr)
+		self.assertDictEqual(repo_info, self.result)
 
 if __name__ == '__main__':
 	unittest.main()

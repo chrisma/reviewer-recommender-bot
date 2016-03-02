@@ -53,7 +53,6 @@ class Marvin(object):
 		diff = self._get_diff(diff_url, diff_path)
 		return self._process_diff(diff)
 
-
 	def _get_diff(self, diff_url=None, diff_path=None):
 		if diff_url is not None:
 			print('Fetching diff from:', diff_url)
