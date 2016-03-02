@@ -84,10 +84,6 @@ class Helper(object):
 			out.append({'header':hunk.header, 'changes':file_changes})
 		return out
 
-		# for hunk in whatthepatch.parse_patch(diff):
-			# print(hunk.changes)
-
-
 if __name__ == "__main__":
 	# print('Using an example pull request')
 	# path = '338.json'
@@ -118,33 +114,3 @@ if __name__ == "__main__":
 	changeset = Helper().analyze_diff(diff_path='338.diff')
 
 	# pprint(changeset)
-
-	test = [
-		{'end': 24, 'start': 11, 'type': 'insert'},
-		{'end': 27, 'start': 27, 'type': 'insert'},
-		{'end': 32, 'start': 32, 'type': 'insert'},
-		{'end': 37, 'start': 37, 'type': 'insert'},
-		{'end': 68, 'start': 68, 'type': 'insert'},
-		{'end': 83, 'start': 83, 'type': 'insert'},
-		{'end': 16, 'start': 11, 'type': 'delete'},
-		{'end': 20, 'start': 19, 'type': 'delete'},
-		{'end': 59, 'start': 59, 'type': 'delete'},
-		{'end': 76, 'start': 73, 'type': 'delete'},
-		{'end': 78, 'start': 78, 'type': 'delete'}
-	]
-
-	pprint(changeset)
-
-	single_file_changes = [x['changes'] for x in changeset if x['header'].new_path == 'app/controllers/work_days_controller.rb'][0]
-
-	for change in test:
-		assert change in single_file_changes
-	assert len(test) == len(single_file_changesx)
-
-	# what = list(whatthepatch.parse_patch(text))
-	# pprint(what[1].changes)
-	# for diff in what:
-		# print(diff)
-	# import pdb; pdb.set_trace()
-	# with codecs.open('338.diff', 'r', encoding='utf-8') as diff:
-		# patch = PatchSet(diff)
