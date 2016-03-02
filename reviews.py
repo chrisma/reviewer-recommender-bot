@@ -7,20 +7,22 @@ import whatthepatch
 
 class Marvin(object):
 	"""Merely A ReView INcentivizer """
-	def __init__(self, pull_request, repo_storage_path):
+	def __init__(self):
 		class ProgressHandler(RemoteProgress):
 			def line_dropped(self, line):
 				print(line)
 			def update(self, *args):
 				print(self._cur_line)
 		print('Marvin started!')
-		self.repo_storage_path = os.path.abspath(repo_storage_path)
-		print('Storing repos to:', self.repo_storage_path)
-		self.ProgressHandler = ProgressHandler()
+		self.progress = ProgressHandler()
+
+	def handle_pr(pull_request, repo_storage_path):
 		repo_info = self._parse_github_pull_request(pull_request)
 		print('Repo info:', repo_info)
-		# self.repo = self._get_repo(**repo_info)
-		self.diff = self.analyze_diff(pull_request['diff_url'])
+		self.repo_storage_path = os.path.abspath(repo_storage_path)
+		print('Storing repos to:', self.repo_storage_path)
+		self.repo = self._get_repo(**repo_info)
+		self.diff = self.analyze_diff(diff_url=pull_request['diff_url'])
 
 	def _parse_github_pull_request(self, pull_request):
 		print('PR', pull_request['number'], ':', pull_request['title'])
@@ -43,12 +45,16 @@ class Marvin(object):
 	def _clone_repo(self, clone_url, full_name, branch):
 		# depth = 1
 		return Repo.clone_from(clone_url, clone_path,
-			progress=self.ProgressHandler,
+			progress=self.progress,
 			branch=branch)
 			# depth=depth)
 
-class Helper(object):
 	def analyze_diff(self, diff_url=None, diff_path=None):
+		diff = self._get_diff(diff_url, diff_path)
+		return self._process_diff(diff)
+
+
+	def _get_diff(self, diff_url=None, diff_path=None):
 		if diff_url is not None:
 			print('Fetching diff from:', diff_url)
 			diff = get(diff_url).text
@@ -58,9 +64,9 @@ class Helper(object):
 				diff = f.read()
 		else:
 			raise Exception('Have to provide either diff_url or diff_path parameter!')
-		return self.process_diff(diff)
+		return diff
 
-	def process_diff(self, diff):
+	def _process_diff(self, diff):
 		def status(change):
 			if change[0] is None:
 				return 'insert'

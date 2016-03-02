@@ -1,5 +1,5 @@
 import unittest
-from reviews import Helper
+from reviews import Marvin
 
 class TestDiffParsing(unittest.TestCase):
 	def setUp(self):
@@ -20,7 +20,7 @@ class TestDiffParsing(unittest.TestCase):
 		]
 
 	def test_real_diff(self):
-		all_changes = Helper().analyze_diff(diff_path=self.diff_path)
+		all_changes = Marvin().analyze_diff(diff_path=self.diff_path)
 		file_changes = [x['changes'] for x in all_changes if x['header'].new_path == self.file][0]
 		self.assertListEqual(file_changes, self.result)
 
