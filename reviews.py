@@ -1,32 +1,34 @@
-import codecs, json, os, codecs
+import codecs, json, os, codecs, logging
 from pprint import pprint
 from git import Repo
 from git.remote import RemoteProgress
 from requests import get
 import whatthepatch
 
+logging.basicConfig(level=logging.INFO)
+
 class Marvin(object):
 	"""Merely A ReView INcentivizer """
 	def __init__(self):
 		class ProgressHandler(RemoteProgress):
 			def line_dropped(self, line):
-				print(line)
+				logging.info(line)
 			def update(self, *args):
-				print(self._cur_line)
-		print('Marvin started!')
+				logging.info(self._cur_line)
+		logging.info('Marvin started!')
 		self.progress = ProgressHandler()
 
 	def handle_pr(pull_request, repo_storage_path):
 		repo_info = self._parse_github_pull_request(pull_request)
-		print('Repo info:', repo_info)
+		logging.info('Repo info: %s' % repo_info)
 		self.repo_storage_path = os.path.abspath(repo_storage_path)
-		print('Storing repos to:', self.repo_storage_path)
+		logging.info('Storing repos to: %s' % self.repo_storage_path)
 		self.repo = self._get_repo(**repo_info)
 		self.diff = self.analyze_diff(diff_url=pull_request['diff_url'])
 
 	def _parse_github_pull_request(self, pull_request):
-		print('PR', pull_request['number'], ':', pull_request['title'])
-		print('html_url:', pull_request['html_url'])
+		logging.info('Parsing PR #%s:%s' % (pull_request['number'], pull_request['title']))
+		logging.info('HTML url: %s' % pull_request['html_url'])
 		clone_url = pull_request['head']['repo']['clone_url']
 		full_name = pull_request['head']['repo']['full_name']
 		branch = pull_request['head']['ref']
@@ -37,13 +39,14 @@ class Marvin(object):
 	def _get_repo(self, full_name, clone_url=None, branch=None):
 		repo_path = os.path.join(self.repo_storage_path, full_name)
 		if os.path.isdir(os.path.join(repo_path, '.git')):
-			print(full_name, 'was already cloned.')
+			logging.info(full_name, '%s was already cloned.')
 			return Repo(repo_path)
 		else:
-			return self._clone_repo(clone_url, full_name, branch)
+			return self._clone_repo(clone_url, repo_path, branch)
 
-	def _clone_repo(self, clone_url, full_name, branch):
+	def _clone_repo(self, clone_url, clone_path, branch):
 		# depth = 1
+		logging.info('Cloning into %s' % clone_path)
 		return Repo.clone_from(clone_url, clone_path,
 			progress=self.progress,
 			branch=branch)
@@ -55,10 +58,10 @@ class Marvin(object):
 
 	def _get_diff(self, diff_url=None, diff_path=None):
 		if diff_url is not None:
-			print('Fetching diff from:', diff_url)
+			logging.info('Fetching diff from: %s' % diff_url)
 			diff = get(diff_url).text
 		elif diff_path is not None:
-			print('Reading local diff from:', diff_path)
+			logging.info('Reading local diff from: %s' % diff_path)
 			with open(diff_path) as f:
 				diff = f.read()
 		else:
@@ -116,6 +119,7 @@ if __name__ == "__main__":
 
 	# pprint(blame_infos)
 
-	changeset = Helper().analyze_diff(diff_path='338.diff')
+	changes = Marvin().analyze_diff(diff_path='338.diff')
+	# pprint(changes)
 
 	# pprint(changeset)
