@@ -4,7 +4,6 @@ from git import Repo
 from git.remote import RemoteProgress
 from requests import get
 import whatthepatch
-# from unidiff import PatchSet
 
 class Marvin(object):
 	"""Merely A ReView INcentivizer """
@@ -70,26 +69,20 @@ class Helper(object):
 			else:
 				return 'equal'
 
-		hunk = list(whatthepatch.parse_patch(diff))
-		hunk = hunk[1]
-		# import pdb; pdb.set_trace()
 		out = []
-		in_changeset = False
-		for change in hunk.changes:
-			if status(change) == 'insert' and not in_changeset:
-				in_changeset = True
-				out.append({'start':change[1], 'type':'insert'})
-			elif status(change) == 'delete' and not in_changeset:
-				in_changeset = True
-				out.append({'start':change[0], 'type':'delete'})
-			elif status(change) == 'equal' and in_changeset:
-				in_changeset = False
-				if out[-1]['type'] == 'insert':
-					out[-1]['end'] = change[1]-1
-				else:
-					out[-1]['end'] = change[0]-1
+		for hunk in whatthepatch.parse_patch(diff):
+			file_changes = []
+			in_changeset = False
+			for mode in [('insert',1), ('delete',0)]:
+				for change in hunk.changes:
+					if status(change) == mode[0] and not in_changeset:
+						in_changeset = True
+						file_changes.append({'start':change[mode[1]], 'type':mode[0]})
+					elif status(change) == 'equal' and in_changeset:
+						in_changeset = False
+						file_changes[-1]['end'] = change[mode[1]]-1
+			out.append({'header':hunk.header, 'changes':file_changes})
 		return out
-
 
 		# for hunk in whatthepatch.parse_patch(diff):
 			# print(hunk.changes)
@@ -123,7 +116,30 @@ if __name__ == "__main__":
 	# pprint(blame_infos)
 
 	changeset = Helper().analyze_diff(diff_path='338.diff')
-	print(changeset)
+
+	# pprint(changeset)
+
+	test = [
+		{'end': 24, 'start': 11, 'type': 'insert'},
+		{'end': 27, 'start': 27, 'type': 'insert'},
+		{'end': 32, 'start': 32, 'type': 'insert'},
+		{'end': 37, 'start': 37, 'type': 'insert'},
+		{'end': 68, 'start': 68, 'type': 'insert'},
+		{'end': 83, 'start': 83, 'type': 'insert'},
+		{'end': 16, 'start': 11, 'type': 'delete'},
+		{'end': 20, 'start': 19, 'type': 'delete'},
+		{'end': 59, 'start': 59, 'type': 'delete'},
+		{'end': 76, 'start': 73, 'type': 'delete'},
+		{'end': 78, 'start': 78, 'type': 'delete'}
+	]
+
+	pprint(changeset)
+
+	single_file_changes = [x['changes'] for x in changeset if x['header'].new_path == 'app/controllers/work_days_controller.rb'][0]
+
+	for change in test:
+		assert change in single_file_changes
+	assert len(test) == len(single_file_changesx)
 
 	# what = list(whatthepatch.parse_patch(text))
 	# pprint(what[1].changes)
