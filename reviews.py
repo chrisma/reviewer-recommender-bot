@@ -36,6 +36,7 @@ class Marvin(object):
 		clone_url = pull_request['head']['repo']['clone_url']
 		full_name = pull_request['head']['repo']['full_name']
 		branch = pull_request['head']['ref']
+		self.number_commits = pull_request['commits']
 		return {'full_name': full_name, 
 				'clone_url': clone_url,
 				'branch': branch}
@@ -96,9 +97,6 @@ class Marvin(object):
 		return out
 
 	def blame_surrounding_lines(self, file_changes):
-		old_cwd = os.getcwd()
-		#  TODO
-		os.chdir('repos/hpi-swt2/wimi-portal')
 		out = {}
 		for changeset in file_changes:
 			file_path = changeset['header'].new_path
@@ -115,18 +113,20 @@ class Marvin(object):
 					else:
 						file_blame[commit_hash] = [line]
 			out[file_path] = file_blame
-		os.chdir(old_cwd)
 		return out
 
 	def blame_line(self, line, file_path):
-		blame_out = git('--no-pager', 'blame', file_path, '-L' + str(line) + ',+1', '-l')
+		#  TODO
+		repo_path = os.path.join(self.repo_storage_path, 'hpi-swt2/wimi-portal')
+		blame_out = git('-C', repo_path, '--no-pager', 'blame', file_path, '-L' + str(line) + ',+1', '-l')
 		commit_hash = blame_out.split(' ')[0]
 		logging.debug('Blame line %s: %s' % (line, commit_hash))
 		return commit_hash
 
 
+
+
 if __name__ == "__main__":
-			# import pdb; pdb.set_trace()
 	# print('Using an example pull request')
 	# path = '338.json'
 	# print('Loading pr from:', path)
@@ -158,17 +158,12 @@ if __name__ == "__main__":
 
 	marvin = Marvin()
 	file_changes = marvin.analyze_diff(diff_path='338.diff')
-	# pprint(file_changes)
+	pprint(file_changes)
 
-	# pprint(file_changes)
-	single_file_changes = [x for x in file_changes if x['header'].new_path == 'app/controllers/work_days_controller.rb'][0]
+	# single_file_changes = [x for x in file_changes if x['header'].new_path == 'app/controllers/work_days_controller.rb'][0]
 	# pprint(single_file_changes)
-	blame = marvin.blame_surrounding_lines([single_file_changes])
+	# blame = marvin.blame_surrounding_lines([single_file_changes])
+	# pprint(blame)
 
-	pprint(blame)
-	# inserts = [x for x in single_file_changes if x['changes']['type'] == 'insert']
-	# authors = marvin.get_surrounding_authors()
-
-	# pprint(changes)
-
-	# pprint(changeset)
+	# blame = marvin.blame_surrounding_lines(file_changes)
+	# pprint(blame)
