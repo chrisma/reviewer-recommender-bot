@@ -118,7 +118,8 @@ class Marvin(object):
 	def blame_line(self, line, file_path):
 		#  TODO
 		repo_path = os.path.join(self.repo_storage_path, 'hpi-swt2/wimi-portal')
-		blame_out = git('-C', repo_path, '--no-pager', 'blame', file_path, '-L' + str(line) + ',+1', '-l')
+		# git -C <repo_path> --no-pager blame -L<line>,+<range> HEAD~<prev> -l -- <file_path>
+		blame_out = git('-C', repo_path, '--no-pager', 'blame', '-L' + str(line) + ',+1', '-l', '--', file_path)
 		commit_hash = blame_out.split(' ')[0]
 		logging.debug('Blame line %s: %s' % (line, commit_hash))
 		return commit_hash
