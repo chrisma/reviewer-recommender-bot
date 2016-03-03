@@ -5,7 +5,7 @@ from git import Repo
 from git.remote import RemoteProgress
 from requests import get
 import whatthepatch
-from sh import git, ls, cd, cat
+from sh import git
 
 Blame = namedtuple('Blame', ['lines','commit'])
 
@@ -96,8 +96,9 @@ class Marvin(object):
 		return out
 
 	def blame_surrounding_lines(self, file_changes):
+		old_cwd = os.getcwd()
 		#  TODO
-		cd('repos/hpi-swt2/wimi-portal')
+		os.chdir('repos/hpi-swt2/wimi-portal')
 		out = {}
 		for changeset in file_changes:
 			file_path = changeset['header'].new_path
@@ -106,18 +107,21 @@ class Marvin(object):
 			inserts = [x for x in changes if x['type'] == 'insert']
 			file_blame = {}
 			for insert in inserts:
+				logging.debug('Blaming around %s' % insert)
 				for line in [insert['start'] - 1, insert['end'] + 1]:
 					commit_hash = self.blame_line(line, file_path)
-					if commit_hash in out:
+					if commit_hash in file_blame:
 						file_blame[commit_hash].append(line)
 					else:
 						file_blame[commit_hash] = [line]
 			out[file_path] = file_blame
+		os.chdir(old_cwd)
 		return out
 
 	def blame_line(self, line, file_path):
 		blame_out = git('--no-pager', 'blame', file_path, '-L' + str(line) + ',+1', '-l')
 		commit_hash = blame_out.split(' ')[0]
+		logging.debug('Blame line %s: %s' % (line, commit_hash))
 		return commit_hash
 
 
@@ -154,11 +158,12 @@ if __name__ == "__main__":
 
 	marvin = Marvin()
 	file_changes = marvin.analyze_diff(diff_path='338.diff')
+	# pprint(file_changes)
 
 	# pprint(file_changes)
-	# single_file_changes = [x for x in file_changes if x['header'].new_path == 'app/controllers/work_days_controller.rb'][0]
-	# print(single_file_changes)
-	blame = marvin.blame_surrounding_lines(file_changes)
+	single_file_changes = [x for x in file_changes if x['header'].new_path == 'app/controllers/work_days_controller.rb'][0]
+	# pprint(single_file_changes)
+	blame = marvin.blame_surrounding_lines([single_file_changes])
 
 	pprint(blame)
 	# inserts = [x for x in single_file_changes if x['changes']['type'] == 'insert']
