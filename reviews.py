@@ -7,8 +7,6 @@ from requests import get
 import whatthepatch
 from sh import git
 
-Blame = namedtuple('Blame', ['lines','commit'])
-
 class Marvin(object):
 	"""Merely A ReView INcentivizer """
 	def __init__(self, repo_storage_path=None):
@@ -22,6 +20,7 @@ class Marvin(object):
 		if repo_storage_path is None:
 			repo_storage_path = 'repos'
 		self.repo_storage_path = os.path.abspath(repo_storage_path)
+		self.number_commits = 0
 
 	def handle_pr(pull_request):
 		repo_info = self._parse_github_pull_request(pull_request)
@@ -36,6 +35,7 @@ class Marvin(object):
 		clone_url = pull_request['head']['repo']['clone_url']
 		full_name = pull_request['head']['repo']['full_name']
 		branch = pull_request['head']['ref']
+		# TODO
 		self.number_commits = pull_request['commits']
 		return {'full_name': full_name, 
 				'clone_url': clone_url,
@@ -115,16 +115,36 @@ class Marvin(object):
 			out[file_path] = file_blame
 		return out
 
-	def blame_line(self, line, file_path):
+	def blame_prev_rev_lines(self, file_changes):
+		out = {}
+		for changeset in file_changes:
+			file_path = changeset['header'].new_path
+			logging.info('git blaming lines around inserts in %s' % file_path)
+			changes = changeset['changes']
+			deletions = [x for x in changes if x['type'] == 'delete']
+			file_blame = {}
+			for deletion in deletions:
+				logging.debug('Blaming around %s' % deletion)
+				for line in range(deletion['start'], deletion['end']+1):
+					commit_hash = self.blame_line(line, file_path, prev_rev=self.number_commits)
+					if commit_hash in file_blame:
+						file_blame[commit_hash].append(line)
+					else:
+						file_blame[commit_hash] = [line]
+			out[file_path] = file_blame
+		return out
+
+	def blame_line(self, line, file_path, prev_rev=None):
 		#  TODO
 		repo_path = os.path.join(self.repo_storage_path, 'hpi-swt2/wimi-portal')
+		prev_rev_param = 'HEAD'
+		if prev_rev is not None:
+			prev_rev_param = 'HEAD~' + str(prev_rev)
 		# git -C <repo_path> --no-pager blame -L<line>,+<range> HEAD~<prev> -l -- <file_path>
-		blame_out = git('-C', repo_path, '--no-pager', 'blame', '-L' + str(line) + ',+1', '-l', '--', file_path)
+		blame_out = git('-C', repo_path, '--no-pager', 'blame', '-L' + str(line) + ',+1', prev_rev_param, '-l', '--', file_path)
 		commit_hash = blame_out.split(' ')[0]
 		logging.debug('Blame line %s: %s' % (line, commit_hash))
 		return commit_hash
-
-
 
 
 if __name__ == "__main__":
@@ -159,12 +179,13 @@ if __name__ == "__main__":
 
 	marvin = Marvin()
 	file_changes = marvin.analyze_diff(diff_path='338.diff')
-	pprint(file_changes)
+	# pprint(file_changes)
 
-	# single_file_changes = [x for x in file_changes if x['header'].new_path == 'app/controllers/work_days_controller.rb'][0]
-	# pprint(single_file_changes)
-	# blame = marvin.blame_surrounding_lines([single_file_changes])
-	# pprint(blame)
+	single_file_changes = [x for x in file_changes if x['header'].new_path == 'app/controllers/work_days_controller.rb'][0]
+	pprint(single_file_changes)
+	marvin.number_commits = 3
+	blame = marvin.blame_prev_rev_lines([single_file_changes])
+	pprint(blame)
 
 	# blame = marvin.blame_surrounding_lines(file_changes)
 	# pprint(blame)
