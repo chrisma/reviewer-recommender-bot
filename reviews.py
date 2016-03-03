@@ -1,15 +1,17 @@
 import codecs, json, os, codecs, logging
 from pprint import pprint
+from collections import namedtuple
 from git import Repo
 from git.remote import RemoteProgress
 from requests import get
 import whatthepatch
+from sh import git, ls, cd, cat
 
-logging.basicConfig(level=logging.INFO)
+Blame = namedtuple('Blame', ['lines','commit'])
 
 class Marvin(object):
 	"""Merely A ReView INcentivizer """
-	def __init__(self):
+	def __init__(self, repo_storage_path=None):
 		class ProgressHandler(RemoteProgress):
 			def line_dropped(self, line):
 				logging.info(line)
@@ -17,11 +19,13 @@ class Marvin(object):
 				logging.info(self._cur_line)
 		logging.info('Marvin started!')
 		self.progress = ProgressHandler()
+		if repo_storage_path is None:
+			repo_storage_path = 'repos'
+		self.repo_storage_path = os.path.abspath(repo_storage_path)
 
-	def handle_pr(pull_request, repo_storage_path):
+	def handle_pr(pull_request):
 		repo_info = self._parse_github_pull_request(pull_request)
 		logging.info('Repo info: %s' % repo_info)
-		self.repo_storage_path = os.path.abspath(repo_storage_path)
 		logging.info('Storing repos to: %s' % self.repo_storage_path)
 		self.repo = self._get_repo(**repo_info)
 		self.diff = self.analyze_diff(diff_url=pull_request['diff_url'])
@@ -76,7 +80,6 @@ class Marvin(object):
 				return 'delete'
 			else:
 				return 'equal'
-
 		out = []
 		for hunk in whatthepatch.parse_patch(diff):
 			file_changes = []
@@ -91,6 +94,24 @@ class Marvin(object):
 						file_changes[-1]['end'] = change[mode[1]]-1
 			out.append({'header':hunk.header, 'changes':file_changes})
 		return out
+
+	def blame_surrounding_lines(self, changeset):
+		file_path = changeset['header'].new_path
+		logging.info('git blaming %s' % file_path)
+		changes = changeset['changes']
+		inserts = [x for x in changes if x['type'] == 'insert']
+		cd('repos/hpi-swt2/wimi-portal')
+		out = {}
+		for insert in inserts:
+			for line in [insert['start'] - 1, insert['end'] + 1]:
+				blame_out = git('--no-pager', 'blame', file_path, '-L' + str(line) + ',+1', '-l')
+				commit_hash = blame_out.split(' ')[0]
+				if commit_hash in out:
+					out[commit_hash].append(line)
+				else:
+					out[commit_hash] = [line]
+		return out
+
 
 if __name__ == "__main__":
 	# print('Using an example pull request')
@@ -119,7 +140,19 @@ if __name__ == "__main__":
 
 	# pprint(blame_infos)
 
-	changes = Marvin().analyze_diff(diff_path='338.diff')
+	logging.basicConfig(level=logging.INFO)
+
+	marvin = Marvin()
+	file_changes = marvin.analyze_diff(diff_path='338.diff')
+
+	# pprint(changes)
+	single_file_changes = [x for x in file_changes if x['header'].new_path == 'app/controllers/work_days_controller.rb'][0]
+	blame = marvin.blame_surrounding_lines(single_file_changes)
+
+	pprint(blame)
+	# inserts = [x for x in single_file_changes if x['changes']['type'] == 'insert']
+	# authors = marvin.get_surrounding_authors()
+
 	# pprint(changes)
 
 	# pprint(changeset)
