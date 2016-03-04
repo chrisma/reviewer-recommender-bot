@@ -20,12 +20,12 @@ class Marvin(object):
 		if repo_storage_path is None:
 			repo_storage_path = 'repos'
 		self.repo_storage_path = os.path.abspath(repo_storage_path)
+		logging.info('Storing repos to: %s' % self.repo_storage_path)
 		self.number_commits = 0
 
 	def handle_pr(pull_request):
 		repo_info = self._parse_github_pull_request(pull_request)
 		logging.info('Repo info: %s' % repo_info)
-		logging.info('Storing repos to: %s' % self.repo_storage_path)
 		self.repo = self._get_repo(**repo_info)
 		self.diff = self.analyze_diff(diff_url=pull_request['diff_url'])
 
@@ -103,35 +103,37 @@ class Marvin(object):
 			logging.info('git blaming lines around inserts in %s' % file_path)
 			changes = changeset['changes']
 			inserts = [x for x in changes if x['type'] == 'insert']
-			file_blame = {}
+			file_blames = []
 			for insert in inserts:
 				logging.debug('Blaming around %s' % insert)
 				for line in [insert['start'] - 1, insert['end'] + 1]:
 					commit_hash = self.blame_line(line, file_path)
-					if commit_hash in file_blame:
-						file_blame[commit_hash].append(line)
+					previous = next((d for d in file_blames if d['commit'] == commit_hash), None)
+					if previous:
+						previous['lines'].append(line)
 					else:
-						file_blame[commit_hash] = [line]
-			out[file_path] = file_blame
+						file_blames.append({'commit':commit_hash, 'lines':[line], 'type':'insert'})
+			out[file_path] = file_blames
 		return out
 
 	def blame_prev_rev_lines(self, file_changes):
 		out = {}
 		for changeset in file_changes:
 			file_path = changeset['header'].new_path
-			logging.info('git blaming lines around inserts in %s' % file_path)
+			logging.info('git blaming lines around deletions in %s' % file_path)
 			changes = changeset['changes']
 			deletions = [x for x in changes if x['type'] == 'delete']
-			file_blame = {}
+			file_blames = []
 			for deletion in deletions:
 				logging.debug('Blaming around %s' % deletion)
 				for line in range(deletion['start'], deletion['end']+1):
 					commit_hash = self.blame_line(line, file_path, prev_rev=self.number_commits)
-					if commit_hash in file_blame:
-						file_blame[commit_hash].append(line)
+					previous = next((d for d in file_blames if d['commit'] == commit_hash), None)
+					if previous:
+						previous['lines'].append(line)
 					else:
-						file_blame[commit_hash] = [line]
-			out[file_path] = file_blame
+						file_blames.append({'commit':commit_hash, 'lines':[line], 'type':'delete'})
+			out[file_path] = file_blames
 		return out
 
 	def blame_line(self, line, file_path, prev_rev=None):
@@ -174,7 +176,7 @@ if __name__ == "__main__":
 
 	# pprint(blame_infos)
 
-	logging.basicConfig(level=logging.INFO)
+	logging.basicConfig(level=logging.WARNING)
 	logging.getLogger('sh').setLevel(logging.WARNING)
 
 	marvin = Marvin()
@@ -182,10 +184,13 @@ if __name__ == "__main__":
 	# pprint(file_changes)
 
 	single_file_changes = [x for x in file_changes if x['header'].new_path == 'app/controllers/work_days_controller.rb'][0]
-	pprint(single_file_changes)
-	marvin.number_commits = 3
-	blame = marvin.blame_prev_rev_lines([single_file_changes])
-	pprint(blame)
-
-	# blame = marvin.blame_surrounding_lines(file_changes)
+	# pprint(single_file_changes)
 	# pprint(blame)
+
+	marvin.number_commits = 3
+	# insert_blames = marvin.blame_surrounding_lines([single_file_changes])
+	delete_blames = marvin.blame_prev_rev_lines([single_file_changes])
+	# pprint(insert_blames)
+	pprint(delete_blames)
+
+	# https://api.github.com/repos/hpi-swt2/wimi-portal/commits?path=app/controllers/work_days_controller.rb&sha=feature/288_timesheet
