@@ -96,6 +96,15 @@ class Marvin(object):
 			out.append({'header':hunk.header, 'changes':file_changes})
 		return out
 
+	def blame_changes(self, file_changes):
+		insert_blames = marvin.blame_surrounding_lines(file_changes)
+		delete_blames = marvin.blame_prev_rev_lines(file_changes)
+		combined = {
+			x: insert_blames.get(x, []) + delete_blames.get(x, [])
+			for x in set(insert_blames).union(delete_blames)
+		}
+		return combined
+
 	def blame_surrounding_lines(self, file_changes):
 		out = {}
 		for changeset in file_changes:
@@ -107,12 +116,12 @@ class Marvin(object):
 			for insert in inserts:
 				logging.debug('Blaming around %s' % insert)
 				for line in [insert['start'] - 1, insert['end'] + 1]:
-					commit_hash = self.blame_line(line, file_path)
+					commit_hash, timestamp = self.blame_line(line, file_path)
 					previous = next((d for d in file_blames if d['commit'] == commit_hash), None)
 					if previous:
-						previous['lines'].append(line)
+						previous['lines'].add(line)
 					else:
-						file_blames.append({'commit':commit_hash, 'lines':[line], 'type':'insert'})
+						file_blames.append({'commit':commit_hash, 'lines':set([line]), 'type':'insert', 'timestamp':timestamp})
 			out[file_path] = file_blames
 		return out
 
@@ -127,12 +136,12 @@ class Marvin(object):
 			for deletion in deletions:
 				logging.debug('Blaming around %s' % deletion)
 				for line in range(deletion['start'], deletion['end']+1):
-					commit_hash = self.blame_line(line, file_path, prev_rev=self.number_commits)
+					commit_hash, timestamp = self.blame_line(line, file_path, prev_rev=self.number_commits)
 					previous = next((d for d in file_blames if d['commit'] == commit_hash), None)
 					if previous:
-						previous['lines'].append(line)
+						previous['lines'].add(line)
 					else:
-						file_blames.append({'commit':commit_hash, 'lines':[line], 'type':'delete'})
+						file_blames.append({'commit':commit_hash, 'lines':set([line]), 'type':'delete', 'timestamp':timestamp})
 			out[file_path] = file_blames
 		return out
 
@@ -143,10 +152,13 @@ class Marvin(object):
 		if prev_rev is not None:
 			prev_rev_param = 'HEAD~' + str(prev_rev)
 		# git -C <repo_path> --no-pager blame -L<line>,+<range> HEAD~<prev> -l -- <file_path>
-		blame_out = git('-C', repo_path, '--no-pager', 'blame', '-L' + str(line) + ',+1', prev_rev_param, '-l', '--', file_path)
-		commit_hash = blame_out.split(' ')[0]
+		blame_out = git('-C', repo_path, '--no-pager', 'blame', '-L' + str(line) + ',+1', prev_rev_param, '-p', '--', file_path)
+		blame_split = blame_out.split('\n')
+		commit_hash = blame_split[0].split(' ')[0]
+		# import pdb; pdb.set_trace()
+		timestamp = blame_split[3].split('author-time ')[1]
 		logging.debug('Blame line %s: %s' % (line, commit_hash))
-		return commit_hash
+		return (commit_hash, timestamp)
 
 
 if __name__ == "__main__":
@@ -181,16 +193,24 @@ if __name__ == "__main__":
 
 	marvin = Marvin()
 	file_changes = marvin.analyze_diff(diff_path='338.diff')
-	# pprint(file_changes)
+	marvin.number_commits = 3
+	blames = marvin.blame_changes(file_changes)
+	pprint(blames)
 
-	single_file_changes = [x for x in file_changes if x['header'].new_path == 'app/controllers/work_days_controller.rb'][0]
+	# single_file_changes = [x for x in file_changes if x['header'].new_path == 'spec/views/work_days/index.html.erb_spec.rb'][0]
+	# single_file_changes = [x for x in file_changes if x['header'].new_path == 'app/controllers/work_days_controller.rb'][0]
 	# pprint(single_file_changes)
 	# pprint(blame)
 
-	marvin.number_commits = 3
-	# insert_blames = marvin.blame_surrounding_lines([single_file_changes])
-	delete_blames = marvin.blame_prev_rev_lines([single_file_changes])
+	# insert_blames = marvin.blame_surrounding_lines(file_changes)
+	# delete_blames = marvin.blame_prev_rev_lines(file_changes)
 	# pprint(insert_blames)
-	pprint(delete_blames)
+	# pprint(delete_blames)
+
+	# combined = {
+	# 	x: insert_blames.get(x, []) + delete_blames.get(x, [])
+	# 	for x in set(insert_blames).union(delete_blames)
+	# }
+	# pprint(combined)
 
 	# https://api.github.com/repos/hpi-swt2/wimi-portal/commits?path=app/controllers/work_days_controller.rb&sha=feature/288_timesheet
