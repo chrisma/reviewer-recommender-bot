@@ -6,10 +6,12 @@ from git.remote import RemoteProgress
 from requests import get
 import whatthepatch
 from sh import git
+from github3 import GitHub
+from github3.pulls import PullRequest
 
 class Marvin(object):
 	"""Merely A ReView INcentivizer """
-	def __init__(self, repo_storage_path=None):
+	def __init__(self ,repo_storage_path=None):
 		class ProgressHandler(RemoteProgress):
 			def line_dropped(self, line):
 				logging.info(line)
@@ -22,8 +24,25 @@ class Marvin(object):
 		self.repo_storage_path = os.path.abspath(repo_storage_path)
 		logging.info('Storing repos to: %s' % self.repo_storage_path)
 		self.number_commits = 0
+		# TODO
+		config_path = os.path.join(os.getcwd(), 'bot', 'gh_config.json')
 
-	def handle_pr(pull_request):
+		with open(config_path) as f:
+			config = json.loads(f.read())
+		self.github = GitHub(config['login'], config['password'])
+		logging.info("Ratelimit remaining:  %s" % self.github.ratelimit_remaining)
+
+
+	def handle_pr(self, pull_request):
+		if isinstance(pull_request, dict):
+			pull_request_obj = PullRequest.from_dict(pull_request)
+		elif isinstance(pull_request, str):
+			pull_request_obj = PullRequest.from_json(pull_request)
+		else:
+			raise Exception('Need to supply either dict or JSON string.')
+		pull_request_obj.session = self.github.session
+		self.pull_request_obj = pull_request_obj
+
 		repo_info = self._parse_github_pull_request(pull_request)
 		logging.info('Repo info: %s' % repo_info)
 		self.repo = self._get_repo(**repo_info)
@@ -44,7 +63,7 @@ class Marvin(object):
 	def _get_repo(self, full_name, clone_url=None, branch=None):
 		repo_path = os.path.join(self.repo_storage_path, full_name)
 		if os.path.isdir(os.path.join(repo_path, '.git')):
-			logging.info(full_name, '%s was already cloned.')
+			logging.info('%s was already cloned.' % full_name)
 			return Repo(repo_path)
 		else:
 			return self._clone_repo(clone_url, repo_path, branch)
@@ -58,22 +77,23 @@ class Marvin(object):
 			# depth=depth)
 
 	def analyze_diff(self, diff_url=None, diff_path=None):
-		diff = self._get_diff(diff_url, diff_path)
+		diff = self.pull_request_obj.diff()
 		return self._process_diff(diff)
 
-	def _get_diff(self, diff_url=None, diff_path=None):
-		if diff_url is not None:
-			logging.info('Fetching diff from: %s' % diff_url)
-			diff = get(diff_url).text
-		elif diff_path is not None:
-			logging.info('Reading local diff from: %s' % diff_path)
-			with open(diff_path) as f:
-				diff = f.read()
-		else:
-			raise Exception('Have to provide either diff_url or diff_path parameter!')
-		return diff
+	# def _get_diff(self, diff_url=None, diff_path=None):
+	# 	if diff_url is not None:
+	# 		logging.info('Fetching diff from: %s' % diff_url)
+	# 		diff = get(diff_url).text
+	# 	elif diff_path is not None:
+	# 		logging.info('Reading local diff from: %s' % diff_path)
+	# 		with open(diff_path) as f:
+	# 			diff = f.read()
+	# 	else:
+	# 		raise Exception('Have to provide either diff_url or diff_path parameter!')
+	# 	return diff
 
 	def _process_diff(self, diff):
+		import pdb; pdb.set_trace()
 		def status(change):
 			if change[0] is None:
 				return 'insert'
@@ -82,7 +102,7 @@ class Marvin(object):
 			else:
 				return 'equal'
 		out = []
-		for hunk in whatthepatch.parse_patch(diff):
+		for hunk in whatthepatch.parse_patch(diff.decode('utf-8')):
 			file_changes = []
 			in_changeset = False
 			for mode in [('insert',1), ('delete',0)]:
@@ -97,8 +117,8 @@ class Marvin(object):
 		return out
 
 	def blame_changes(self, file_changes):
-		insert_blames = marvin.blame_surrounding_lines(file_changes)
-		delete_blames = marvin.blame_prev_rev_lines(file_changes)
+		insert_blames = self.blame_surrounding_lines(file_changes)
+		delete_blames = self.blame_prev_rev_lines(file_changes)
 		combined = {
 			x: insert_blames.get(x, []) + delete_blames.get(x, [])
 			for x in set(insert_blames).union(delete_blames)
@@ -116,12 +136,17 @@ class Marvin(object):
 			for insert in inserts:
 				logging.debug('Blaming around %s' % insert)
 				for line in [insert['start'] - 1, insert['end'] + 1]:
-					commit_hash, timestamp = self.blame_line(line, file_path)
+					commit_hash, author, timestamp = self.blame_line(line, file_path)
 					previous = next((d for d in file_blames if d['commit'] == commit_hash), None)
 					if previous:
 						previous['lines'].add(line)
 					else:
-						file_blames.append({'commit':commit_hash, 'lines':set([line]), 'type':'insert', 'timestamp':timestamp})
+						file_blames.append({
+							'commit':commit_hash,
+							'lines':set([line]),
+							'type':'insert',
+							'author': author,
+							'timestamp':timestamp})
 			out[file_path] = file_blames
 		return out
 
@@ -136,12 +161,17 @@ class Marvin(object):
 			for deletion in deletions:
 				logging.debug('Blaming around %s' % deletion)
 				for line in range(deletion['start'], deletion['end']+1):
-					commit_hash, timestamp = self.blame_line(line, file_path, prev_rev=self.number_commits)
+					commit_hash, author, timestamp = self.blame_line(line, file_path, prev_rev=self.number_commits)
 					previous = next((d for d in file_blames if d['commit'] == commit_hash), None)
 					if previous:
 						previous['lines'].add(line)
 					else:
-						file_blames.append({'commit':commit_hash, 'lines':set([line]), 'type':'delete', 'timestamp':timestamp})
+						file_blames.append({
+							'commit':commit_hash, 
+							'lines':set([line]),
+							'type':'delete',
+							'author': author,
+							'timestamp':timestamp})
 			out[file_path] = file_blames
 		return out
 
@@ -155,13 +185,14 @@ class Marvin(object):
 		blame_out = git('-C', repo_path, '--no-pager', 'blame', '-L' + str(line) + ',+1', prev_rev_param, '-p', '--', file_path)
 		blame_split = blame_out.split('\n')
 		commit_hash = blame_split[0].split(' ')[0]
-		# import pdb; pdb.set_trace()
+		author = blame_split[1].split('author ')[1]
 		timestamp = blame_split[3].split('author-time ')[1]
 		logging.debug('Blame line %s: %s' % (line, commit_hash))
-		return (commit_hash, timestamp)
+		return (commit_hash, author, timestamp)
 
 
 if __name__ == "__main__":
+		# import pdb; pdb.set_trace()
 	# print('Using an example pull request')
 	# path = '338.json'
 	# print('Loading pr from:', path)
@@ -195,7 +226,32 @@ if __name__ == "__main__":
 	file_changes = marvin.analyze_diff(diff_path='338.diff')
 	marvin.number_commits = 3
 	blames = marvin.blame_changes(file_changes)
-	pprint(blames)
+	# pprint(blames)
+
+	reviewers = {}
+	for file, changes in blames.items():
+		for change in changes:
+			change['file'] = file
+			author = change['author']
+			if author in reviewers:
+				reviewers[author].append(change)
+			else:
+				reviewers[author] = [change]
+	# pprint(reviewers)
+
+	to_query = []
+	for author, changes in reviewers.items():
+		to_query.append((author, changes[0]['commit']))
+	print(to_query)
+
+	# from github3 import GitHub
+	# with open('gh_config.json') as f:
+	# 	config = json.loads(f.read())
+	# gh = GitHub(config['login'], config['password'])
+
+
+
+
 
 	# single_file_changes = [x for x in file_changes if x['header'].new_path == 'spec/views/work_days/index.html.erb_spec.rb'][0]
 	# single_file_changes = [x for x in file_changes if x['header'].new_path == 'app/controllers/work_days_controller.rb'][0]
