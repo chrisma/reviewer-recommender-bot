@@ -30,6 +30,7 @@ class Marvin(object):
 		with open(config_path) as f:
 			config = json.loads(f.read())
 		self.github = GitHub(config['login'], config['password'])
+		self.gh_repo = None
 		logging.info("Ratelimit remaining:  %s" % self.github.ratelimit_remaining)
 
 
@@ -93,7 +94,6 @@ class Marvin(object):
 	# 	return diff
 
 	def _process_diff(self, diff):
-		import pdb; pdb.set_trace()
 		def status(change):
 			if change[0] is None:
 				return 'insert'
@@ -189,6 +189,13 @@ class Marvin(object):
 		timestamp = blame_split[3].split('author-time ')[1]
 		logging.debug('Blame line %s: %s' % (line, commit_hash))
 		return (commit_hash, author, timestamp)
+
+	def get_github_login(self, sha):
+		if not self.gh_repo:
+			# TODO
+			self.gh_repo = self.github.repository('chrisma','wimi-portal')
+		login = self.gh_repo.commit(sha).author.login
+		return login
 
 
 if __name__ == "__main__":
