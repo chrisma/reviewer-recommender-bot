@@ -100,8 +100,8 @@ class Marvin(object):
 			last_commit_sha = repo.active_branch.log_entry(0).newhexsha
 			if last_commit_sha != self.pull_request.head.sha:
 				logging.info('Repo is outdated. Switching to "%s" and pulling.' % self.branch)
+				repo.git.pull('origin', self.branch)
 				repo.git.checkout(self.branch)
-				repo.git.pull()
 			return repo
 		else:
 			# git clone --branch <branch> --single-branch --no-checkout --depth <n>
