@@ -34,6 +34,7 @@ class Marvin(object):
 		self.pull_request = None
 		self.repo_owner = None
 		self.repo_name = None
+		self.branch = None
 		self.repo_path = None
 		self.repo = None
 		self.raw_diff = None
@@ -48,9 +49,10 @@ class Marvin(object):
 		clone_info = self._get_clone_info(pull_request_dict)
 		self.repo_owner = clone_info['owner']
 		self.repo_name = clone_info['name']
+		self.branch = clone_info['branch']
 		self.repo_path = os.path.join(self.repo_dir, self.repo_owner, self.repo_name)
 		# Clone the repo / get a prviously cloned repository
-		self.repo = self._get_repo(clone_info['clone_url'], clone_info['branch'])
+		self.repo = self._get_repo(clone_info['clone_url'], self.branch)
 		# Query Github for the pull request's diff
 		self.raw_diff = self.pull_request.diff()
 		# Find lines around changes
@@ -72,7 +74,7 @@ class Marvin(object):
 	def _construct_pull_request(self, pull_request_dict):
 		pull_request = PullRequest.from_dict(pull_request_dict)
 		pull_request.session = self.github.session
-		logging.info('Handling PR #{number}:{title} ({html_url})'.format(
+		logging.info('Handling PR #{number}: "{title}" ({html_url})'.format(
 			number=pull_request.number,
 			title=pull_request.title,
 			html_url=pull_request.html_url))
@@ -93,7 +95,14 @@ class Marvin(object):
 	def _get_repo(self, clone_url=None, branch=None):
 		if self._is_git_dir(self.repo_path):
 			logging.info('"%s" is already a git repo.' % self.repo_path)
-			return Repo(self.repo_path)
+			repo = Repo(self.repo_path)
+			logging.info('Currently on branch "%s"' % repo.active_branch.name)
+			last_commit_sha = repo.active_branch.log_entry(0).newhexsha
+			if last_commit_sha != self.pull_request.head.sha:
+				logging.info('Repo is outdated. Switching to "%s" and pulling.' % self.branch)
+				repo.git.checkout(self.branch)
+				repo.git.pull()
+			return repo
 		else:
 			# git clone --branch <branch> --single-branch --no-checkout --depth <n>
 			logging.info('Cloning into %s' % self.repo_path)
@@ -225,7 +234,7 @@ class Marvin(object):
 			for change in changes:
 				change['login'] = login
 				pr_changes.append(change)
-		# pprint(pr_changes)
+		pprint(pr_changes)
 
 		return pr_changes
 
