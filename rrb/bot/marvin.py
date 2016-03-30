@@ -1,6 +1,9 @@
 import codecs, json, os, codecs, logging
 from pprint import pprint
 from collections import namedtuple
+import itertools
+import operator
+
 from git import Repo
 from git.remote import RemoteProgress
 from requests import get
@@ -26,9 +29,36 @@ class Marvin(object):
 
 		self.github = self._get_github_api()
 		logging.info("Ratelimit remaining:  %s" % self.github.ratelimit_remaining)
-		self.gh_repo = None
 		self.pull_request = None
+		self.repo_owner = None
+		self.repo_name = None
 		self.repo_path = None
+		self.repo = None
+		self.raw_diff = None
+		self.file_changes = None
+		self.gh_repo = None
+		self.repo_path = None
+
+	def handle_pr(self, pull_request_dict):
+		# Build an object that encapsulates the Github Ppull request API
+		self.pull_request = self._construct_pull_request(pull_request_dict)
+		# Retrieve all information necessary to clone the repository
+		clone_info = self._get_clone_info(pull_request_dict)
+		self.repo_owner = clone_info['owner']
+		self.repo_name = clone_info['name']
+		self.repo_path = os.path.join(self.repo_dir, self.repo_owner, self.repo_name)
+		# Clone the repo / get a prviously cloned repository
+		self.repo = self._get_repo(clone_info['clone_url'], clone_info['branch'])
+		# Query Github for the pull request's diff
+		self.raw_diff = self.pull_request.diff()
+		# Find lines around changes
+		self.file_changes = self.analyze_diff(self.raw_diff)
+		# Find users that edited those lines
+		self.blames = self.blame_changes(self.file_changes)
+		# Git blame returns names and emails, query GH for the unique user logins
+		self.result = self.connect_with_gh_logins(self.blames)
+		# Create statistics of who should review
+		return self.summarize(self.result)
 
 	def _get_github_api(self):
 		# TODO
@@ -37,21 +67,14 @@ class Marvin(object):
 			config = json.loads(f.read())
 		return GitHub(config['login'], config['password'])
 
-	def handle_pr(self, pull_request_dict):
+	def _construct_pull_request(self, pull_request_dict):
 		pull_request = PullRequest.from_dict(pull_request_dict)
 		pull_request.session = self.github.session
-		self.pull_request = pull_request
 		logging.info('Handling PR #{number}:{title} ({html_url})'.format(
 			number=pull_request.number,
 			title=pull_request.title,
 			html_url=pull_request.html_url))
-
-		clone_info = self._get_clone_info(pull_request_dict)
-		self.repo_owner = clone_info['owner']
-		self.repo_name = clone_info['name']
-		self.repo_path = os.path.join(self.repo_dir, self.repo_owner, self.repo_name)
-		self.repo = self._get_repo(clone_info['clone_url'], clone_info['branch'])
-		self.diff = self.analyze_diff(diff_url=pull_request_dict['diff_url'])
+		return pull_request
 
 	def _get_clone_info(self, pull_request_dict):
 		info = {}
@@ -76,11 +99,7 @@ class Marvin(object):
 				progress=self.progress,
 				branch=branch)
 
-	def analyze_diff(self, diff_url=None, diff_path=None):
-		diff = self.pull_request.diff()
-		return self._process_diff(diff)
-
-	def _process_diff(self, diff):
+	def analyze_diff(self, diff):
 		def status(change):
 			if change[0] is None:
 				return 'insert'
@@ -181,83 +200,35 @@ class Marvin(object):
 		login = self.gh_repo.commit(sha).author.login
 		return login
 
+	def connect_with_gh_logins(self, blames):
+		reviewers = {}
+		for file, changes in blames.items():
+			for change in changes:
+				change['file'] = file
+				author = change['author']
+				if author in reviewers:
+					reviewers[author].append(change)
+				else:
+					reviewers[author] = [change]
+		# pprint(reviewers)
 
-if __name__ == "__main__":
-		# import pdb; pdb.set_trace()
-	# print('Using an example pull request')
-	# path = '338.json'
-	# print('Loading pr from:', path)
-	# with codecs.open(path, 'r', encoding='utf-8') as f:
-	# 	pr = json.loads(f.read())
-	# bot = Marvin(pr, repo_dir='repos')
+		github_logins = {}
+		for author, changes in reviewers.items():
+			github_logins[author] = self.get_github_login(changes[0]['commit'])
+		# print(github_logins)
 
-	# print('*'*20)
-	# print(bot.repo.working_dir)
-	# print(bot.repo.description)
-	# print(bot.repo.active_branch)
-	# print('*'*20)
-	# pprint(bot.get_changes())
+		pr_changes = []
+		for author, changes in reviewers.items():
+			login = github_logins[author]
+			for change in changes:
+				change['login'] = login
+				pr_changes.append(change)
+		# pprint(pr_changes)
 
-	# rev = 'd34b7de78259a2e83ec7cfc16bff084ad1d4685c'
-	# file = 'app/assets/stylesheets/application.css'
-	# blame_infos = bot.repo.blame(rev, file)
-	# [
-	#  [<git.Commit "c78b9c1c0a57cc62505a377726f000b00c2e8f66">,
-	#	['    background-color: #FFFFFF;']],
-	#  [<git.Commit "b57effdfe706d5b24b53cc780395ea9bfc5fcab8">,
-	#	['    padding: 15px;']]
-	# ]
+		return pr_changes
 
-	# pprint(blame_infos)
-
-	logging.basicConfig(level=logging.WARNING)
-	logging.getLogger('sh').setLevel(logging.WARNING)
-
-	marvin = Marvin()
-	file_changes = marvin.analyze_diff(diff_path='338.diff')
-	marvin.number_commits = 3
-	blames = marvin.blame_changes(file_changes)
-	# pprint(blames)
-
-	reviewers = {}
-	for file, changes in blames.items():
-		for change in changes:
-			change['file'] = file
-			author = change['author']
-			if author in reviewers:
-				reviewers[author].append(change)
-			else:
-				reviewers[author] = [change]
-	# pprint(reviewers)
-
-	to_query = []
-	for author, changes in reviewers.items():
-		to_query.append((author, changes[0]['commit']))
-	print(to_query)
-
-	# from github3 import GitHub
-	# with open('gh_config.json') as f:
-	# 	config = json.loads(f.read())
-	# gh = GitHub(config['login'], config['password'])
-
-
-
-
-
-	# single_file_changes = [x for x in file_changes if x['header'].new_path == 'spec/views/work_days/index.html.erb_spec.rb'][0]
-	# single_file_changes = [x for x in file_changes if x['header'].new_path == 'app/controllers/work_days_controller.rb'][0]
-	# pprint(single_file_changes)
-	# pprint(blame)
-
-	# insert_blames = marvin.blame_surrounding_lines(file_changes)
-	# delete_blames = marvin.blame_prev_rev_lines(file_changes)
-	# pprint(insert_blames)
-	# pprint(delete_blames)
-
-	# combined = {
-	# 	x: insert_blames.get(x, []) + delete_blames.get(x, [])
-	# 	for x in set(insert_blames).union(delete_blames)
-	# }
-	# pprint(combined)
-
-	# https://api.github.com/repos/hpi-swt2/wimi-portal/commits?path=app/controllers/work_days_controller.rb&sha=feature/288_timesheet
+	def summarize(self, pr_changes):
+		get_attr = operator.itemgetter('login')
+		changes_count = [{'login':key, 'count':sum(1 for x in group)} for key, group in itertools.groupby(pr_changes, get_attr)]
+		changes_count = sorted(changes_count, key=lambda x: x['count'], reverse=True)
+		return changes_count
