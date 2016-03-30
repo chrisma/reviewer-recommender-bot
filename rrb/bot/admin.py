@@ -2,9 +2,7 @@ from django.contrib import admin
 from django import forms
 from django.utils.safestring import mark_safe
 
-from .models import GitHubPullRequest
-
-# Register your models here.
+from .models import GitHubPullRequest, Change
 
 class FancyDictWidget(forms.Textarea):
     class Media:
@@ -46,3 +44,4 @@ class GitHubPullRequestAdmin(admin.ModelAdmin):
     form = FancyDictForm
 
 admin.site.register(GitHubPullRequest, GitHubPullRequestAdmin)
+admin.site.register(Change)
