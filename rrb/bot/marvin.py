@@ -11,7 +11,7 @@ from github3.pulls import PullRequest
 
 class Marvin(object):
 	"""Merely A ReView INcentivizer """
-	def __init__(self ,repo_storage_path=None):
+	def __init__(self, repo_dir=None):
 		class ProgressHandler(RemoteProgress):
 			def line_dropped(self, line):
 				logging.info(line)
@@ -19,79 +19,66 @@ class Marvin(object):
 				logging.info(self._cur_line)
 		logging.info('Marvin started!')
 		self.progress = ProgressHandler()
-		if repo_storage_path is None:
-			repo_storage_path = 'repos'
-		self.repo_storage_path = os.path.abspath(repo_storage_path)
-		logging.info('Storing repos to: %s' % self.repo_storage_path)
-		self.number_commits = 0
+		if repo_dir is None:
+			repo_dir = 'repos'
+		self.repo_dir = os.path.abspath(repo_dir)
+		logging.info('Storing repos to "%s"' % self.repo_dir)
+
+		self.github = self._get_github_api()
+		logging.info("Ratelimit remaining:  %s" % self.github.ratelimit_remaining)
+		self.gh_repo = None
+		self.pull_request = None
+		self.repo_path = None
+
+	def _get_github_api(self):
 		# TODO
 		config_path = os.path.join(os.getcwd(), 'bot', 'gh_config.json')
-
 		with open(config_path) as f:
 			config = json.loads(f.read())
-		self.github = GitHub(config['login'], config['password'])
-		self.gh_repo = None
-		logging.info("Ratelimit remaining:  %s" % self.github.ratelimit_remaining)
+		return GitHub(config['login'], config['password'])
 
+	def handle_pr(self, pull_request_dict):
+		pull_request = PullRequest.from_dict(pull_request_dict)
+		pull_request.session = self.github.session
+		self.pull_request = pull_request
+		logging.info('Handling PR #{number}:{title} ({html_url})'.format(
+			number=pull_request.number,
+			title=pull_request.title,
+			html_url=pull_request.html_url))
 
-	def handle_pr(self, pull_request):
-		if isinstance(pull_request, dict):
-			pull_request_obj = PullRequest.from_dict(pull_request)
-		elif isinstance(pull_request, str):
-			pull_request_obj = PullRequest.from_json(pull_request)
+		clone_info = self._get_clone_info(pull_request_dict)
+		self.repo_owner = clone_info['owner']
+		self.repo_name = clone_info['name']
+		self.repo_path = os.path.join(self.repo_dir, self.repo_owner, self.repo_name)
+		self.repo = self._get_repo(clone_info['clone_url'], clone_info['branch'])
+		self.diff = self.analyze_diff(diff_url=pull_request_dict['diff_url'])
+
+	def _get_clone_info(self, pull_request_dict):
+		info = {}
+		info['clone_url'] = pull_request_dict['head']['repo']['clone_url']
+		info['owner'] = pull_request_dict['head']['repo']['owner']['login']
+		info['name'] = pull_request_dict['head']['repo']['name']
+		info['branch'] = pull_request_dict['head']['ref']
+		logging.info('Clone info: %s' % info)
+		return info
+
+	def _is_git_dir(dir_path):
+		return os.path.isdir(os.path.join(dir_path, '.git'))
+
+	def _get_repo(self, clone_url=None, branch=None):
+		if self._is_git_dir(self.repo_path):
+			logging.info('"%s" is already a git repo.' % self.repo_path)
+			return Repo(self.repo_path)
 		else:
-			raise Exception('Need to supply either dict or JSON string.')
-		pull_request_obj.session = self.github.session
-		self.pull_request_obj = pull_request_obj
-
-		repo_info = self._parse_github_pull_request(pull_request)
-		logging.info('Repo info: %s' % repo_info)
-		self.repo = self._get_repo(**repo_info)
-		self.diff = self.analyze_diff(diff_url=pull_request['diff_url'])
-
-	def _parse_github_pull_request(self, pull_request):
-		logging.info('Parsing PR #%s:%s' % (pull_request['number'], pull_request['title']))
-		logging.info('HTML url: %s' % pull_request['html_url'])
-		clone_url = pull_request['head']['repo']['clone_url']
-		full_name = pull_request['head']['repo']['full_name']
-		branch = pull_request['head']['ref']
-		# TODO
-		self.number_commits = pull_request['commits']
-		return {'full_name': full_name, 
-				'clone_url': clone_url,
-				'branch': branch}
-
-	def _get_repo(self, full_name, clone_url=None, branch=None):
-		repo_path = os.path.join(self.repo_storage_path, full_name)
-		if os.path.isdir(os.path.join(repo_path, '.git')):
-			logging.info('%s was already cloned.' % full_name)
-			return Repo(repo_path)
-		else:
-			return self._clone_repo(clone_url, repo_path, branch)
-
-	def _clone_repo(self, clone_url, clone_path, branch):
-		# depth = 1
-		logging.info('Cloning into %s' % clone_path)
-		return Repo.clone_from(clone_url, clone_path,
-			progress=self.progress,
-			branch=branch)
-			# depth=depth)
+			# git clone --branch <branch> --single-branch --no-checkout --depth <n>
+			logging.info('Cloning into %s' % self.repo_path)
+			return Repo.clone_from(clone_url, self.repo_path,
+				progress=self.progress,
+				branch=branch)
 
 	def analyze_diff(self, diff_url=None, diff_path=None):
-		diff = self.pull_request_obj.diff()
+		diff = self.pull_request.diff()
 		return self._process_diff(diff)
-
-	# def _get_diff(self, diff_url=None, diff_path=None):
-	# 	if diff_url is not None:
-	# 		logging.info('Fetching diff from: %s' % diff_url)
-	# 		diff = get(diff_url).text
-	# 	elif diff_path is not None:
-	# 		logging.info('Reading local diff from: %s' % diff_path)
-	# 		with open(diff_path) as f:
-	# 			diff = f.read()
-	# 	else:
-	# 		raise Exception('Have to provide either diff_url or diff_path parameter!')
-	# 	return diff
 
 	def _process_diff(self, diff):
 		def status(change):
@@ -161,7 +148,7 @@ class Marvin(object):
 			for deletion in deletions:
 				logging.debug('Blaming around %s' % deletion)
 				for line in range(deletion['start'], deletion['end']+1):
-					commit_hash, author, timestamp = self.blame_line(line, file_path, prev_rev=self.number_commits)
+					commit_hash, author, timestamp = self.blame_line(line, file_path, prev_rev=self.pull_request.commits_count)
 					previous = next((d for d in file_blames if d['commit'] == commit_hash), None)
 					if previous:
 						previous['lines'].add(line)
@@ -176,13 +163,11 @@ class Marvin(object):
 		return out
 
 	def blame_line(self, line, file_path, prev_rev=None):
-		#  TODO
-		repo_path = os.path.join(self.repo_storage_path, 'hpi-swt2/wimi-portal')
 		prev_rev_param = 'HEAD'
 		if prev_rev is not None:
 			prev_rev_param = 'HEAD~' + str(prev_rev)
 		# git -C <repo_path> --no-pager blame -L<line>,+<range> HEAD~<prev> -l -- <file_path>
-		blame_out = git('-C', repo_path, '--no-pager', 'blame', '-L' + str(line) + ',+1', prev_rev_param, '-p', '--', file_path)
+		blame_out = git('-C', self.repo_path, '--no-pager', 'blame', '-L' + str(line) + ',+1', prev_rev_param, '-p', '--', file_path)
 		blame_split = blame_out.split('\n')
 		commit_hash = blame_split[0].split(' ')[0]
 		author = blame_split[1].split('author ')[1]
@@ -192,8 +177,7 @@ class Marvin(object):
 
 	def get_github_login(self, sha):
 		if not self.gh_repo:
-			# TODO
-			self.gh_repo = self.github.repository('chrisma','wimi-portal')
+			self.gh_repo = self.github.repository(self.repo_owner, self.repo_name)
 		login = self.gh_repo.commit(sha).author.login
 		return login
 
@@ -205,7 +189,7 @@ if __name__ == "__main__":
 	# print('Loading pr from:', path)
 	# with codecs.open(path, 'r', encoding='utf-8') as f:
 	# 	pr = json.loads(f.read())
-	# bot = Marvin(pr, repo_storage_path='repos')
+	# bot = Marvin(pr, repo_dir='repos')
 
 	# print('*'*20)
 	# print(bot.repo.working_dir)

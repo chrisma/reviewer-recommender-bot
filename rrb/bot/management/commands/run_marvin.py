@@ -12,14 +12,14 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         logging.basicConfig(level=logging.INFO)
         logging.getLogger('sh').setLevel(logging.WARNING)
+        logging.getLogger('requests').setLevel(logging.WARNING)
+        logging.getLogger('github3').setLevel(logging.WARNING)
+        logging.info(self.style.SUCCESS('Command "run_marvin" started!'))
 
-        logging.info(self.style.SUCCESS('Command started!'))
         pr = GitHubPullRequest.objects.get(id=5)
-        logging.info('Using PR: ' + str(pr))
-        repo_storage_path = '/home/christoph/git/reviewer-recommender-bot/repos'
-        marvin = Marvin(repo_storage_path=repo_storage_path)
+        repo_storage_dir = '/home/christoph/git/reviewer-recommender-bot/repos'
+        marvin = Marvin(repo_dir=repo_storage_dir)
         marvin.handle_pr(pr.pull_request_json)
-        marvin.number_commits = 3
         file_changes = marvin.diff
         blames = marvin.blame_changes(file_changes)
         # pprint(blames)
@@ -33,7 +33,7 @@ class Command(BaseCommand):
                     reviewers[author].append(change)
                 else:
                     reviewers[author] = [change]
-        # pprint(reviewers)
+        pprint(reviewers)
 
         github_logins = {}
         for author, changes in reviewers.items():
@@ -51,5 +51,5 @@ class Command(BaseCommand):
         get_attr = operator.itemgetter('login')
         changes_count = [{'login':key, 'count':sum(1 for x in group)} for key, group in itertools.groupby(pr_changes, get_attr)]
         changes_count = sorted(changes_count, key=lambda x: x['count'], reverse=True)
-        print(changes_count)
+        pprint(changes_count)
         # import pdb; pdb.set_trace()
