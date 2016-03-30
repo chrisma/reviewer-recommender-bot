@@ -62,7 +62,7 @@ class Marvin(object):
 		logging.info('Clone info: %s' % info)
 		return info
 
-	def _is_git_dir(dir_path):
+	def _is_git_dir(self, dir_path):
 		return os.path.isdir(os.path.join(dir_path, '.git'))
 
 	def _get_repo(self, clone_url=None, branch=None):
