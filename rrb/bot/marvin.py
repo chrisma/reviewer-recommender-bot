@@ -28,7 +28,9 @@ class Marvin(object):
 		logging.info('Storing repos to "%s"' % self.repo_dir)
 
 		self.github = self._get_github_api()
-		logging.info("Ratelimit remaining:  %s" % self.github.ratelimit_remaining)
+		logging.info('Attempting to connect to Github...')
+		ratelimit_remaining = self.github.ratelimit_remaining
+		logging.info("Ratelimit remaining: %s" % ratelimit_remaining)
 		self.pull_request = None
 		self.repo_owner = None
 		self.repo_name = None
@@ -229,6 +231,8 @@ class Marvin(object):
 
 	def summarize(self, pr_changes):
 		get_attr = operator.itemgetter('login')
+		# Have to sort before groupby
+		pr_changes = sorted(pr_changes, key=get_attr)
 		changes_count = [{'login':key, 'count':sum(1 for x in group)} for key, group in itertools.groupby(pr_changes, get_attr)]
 		changes_count = sorted(changes_count, key=lambda x: x['count'], reverse=True)
 		return changes_count
