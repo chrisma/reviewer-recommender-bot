@@ -27,10 +27,7 @@ class Marvin(object):
 		self.repo_dir = os.path.abspath(repo_dir)
 		logging.info('Storing repos to "%s"' % self.repo_dir)
 
-		self.github = self._get_github_api()
-		logging.info('Attempting to connect to Github...')
-		ratelimit_remaining = self.github.ratelimit_remaining
-		logging.info("Ratelimit remaining: %s" % ratelimit_remaining)
+		self._github = None
 		self.pull_request = None
 		self.repo_owner = None
 		self.repo_name = None
@@ -41,6 +38,12 @@ class Marvin(object):
 		self.file_changes = None
 		self.gh_repo = None
 		self.repo_path = None
+
+	@property
+	def github(self):
+		if not self._github:
+			self._github = self._get_github_api()
+		return self._github
 
 	def handle_pr(self, pull_request_dict):
 		# Build an object that encapsulates the Github Ppull request API
@@ -70,7 +73,10 @@ class Marvin(object):
 		logging.info('Reading Github config from "{path}"'.format(path=config_path))
 		with open(config_path) as f:
 			config = json.loads(f.read())
-		return GitHub(config['login'], config['password'])
+		logging.info('Attempting to connect to Github...')
+		gh = GitHub(config['login'], config['password'])
+		logging.info("Ratelimit remaining: %s" % gh.ratelimit_remaining)
+		return gh
 
 	def _construct_pull_request(self, pull_request_dict):
 		pull_request = PullRequest.from_dict(pull_request_dict)
