@@ -65,8 +65,9 @@ class Marvin(object):
 		return self.summarize(self.result)
 
 	def _get_github_api(self):
-		# TODO
-		config_path = os.path.join(os.getcwd(), 'bot', 'gh_config.json')
+		config_dir = os.path.dirname(os.path.realpath(__file__))
+		config_path = os.path.join(config_dir, 'gh_config.json')
+		logging.info('Reading Github config from "{path}"'.format(path=config_path))
 		with open(config_path) as f:
 			config = json.loads(f.read())
 		return GitHub(config['login'], config['password'])
