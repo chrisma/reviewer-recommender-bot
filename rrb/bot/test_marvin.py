@@ -13,7 +13,7 @@ class MarvinTest(unittest.TestCase):
 		with open(os.path.join(self.test_data_dir, file), 'rb') as f:
 			return f.read()
 
-class TestDiffParsingWithModifiedLine(MarvinTest):
+class TestDiffModifiedLine(MarvinTest):
 	def setUp(self):
 		self.file_changes = self.marvin.analyze_diff(self.read('modify.diff'))
 		self.line_number = 40
@@ -32,7 +32,7 @@ class TestDiffParsingWithModifiedLine(MarvinTest):
 					{'start': self.line_number, 'type': 'delete', 'end': self.line_number}]
 		self.assertCountEqual(actual, changes)
 
-class TestDiffParsingWithAppendedLine(MarvinTest):
+class TestDiffAppendedLine(MarvinTest):
 	def setUp(self):
 		self.file_changes = self.marvin.analyze_diff(self.read('append.diff'))
 		self.line_number = 113
@@ -50,7 +50,7 @@ class TestDiffParsingWithAppendedLine(MarvinTest):
 		actual = [{'start': self.line_number, 'end': self.line_number, 'type': 'insert'}]
 		self.assertCountEqual(actual, changes)
 
-class TestDiffParsingWithPrependedLine(MarvinTest):
+class TestDiffPrependedLine(MarvinTest):
 	def setUp(self):
 		self.file_changes = self.marvin.analyze_diff(self.read('prepend.diff'))
 		self.line_number = 1
@@ -68,7 +68,7 @@ class TestDiffParsingWithPrependedLine(MarvinTest):
 		actual = [{'start': self.line_number, 'end': self.line_number, 'type': 'insert'}]
 		self.assertCountEqual(actual, changes)
 
-class TestDiffParsingWithDeletedLine(MarvinTest):
+class TestDiffDeletedLine(MarvinTest):
 	def setUp(self):
 		self.file_changes = self.marvin.analyze_diff(self.read('delete.diff'))
 		self.line_number = 37
@@ -86,7 +86,7 @@ class TestDiffParsingWithDeletedLine(MarvinTest):
 		actual = [{'start': self.line_number, 'end': self.line_number, 'type': 'delete'}]
 		self.assertCountEqual(actual, changes)
 
-class TestDiffParsingWithMultipleEdits(MarvinTest):
+class TestDiffMultipleEdits(MarvinTest):
 	def setUp(self):
 		self.file_changes = self.marvin.analyze_diff(self.read('multiple_edits.diff'))
 
@@ -107,7 +107,7 @@ class TestDiffParsingWithMultipleEdits(MarvinTest):
 					{'start': 118, 'end': 119, 'type': 'insert'}]
 		self.assertCountEqual(actual, changes)
 
-class TestDiffParsingWithMultipleFiles(MarvinTest):
+class TestDiffMultipleFiles(MarvinTest):
 	def setUp(self):
 		self.file_changes = self.marvin.analyze_diff(self.read('multiple_files.diff'))
 
