@@ -170,5 +170,29 @@ class TestDiffMultipleFiles(MarvinTest):
 		file2_actual = [{'start': 25, 'end': 26, 'type': 'insert'}]
 		self.assertCountEqual(file2_actual, file2_changes)
 
+class TestDiffLarge(MarvinTest):
+	def setUp(self):
+		self.file_changes = self.marvin.analyze_diff(self.read('pr_338.diff'))
+
+	def test_amount(self):
+		self.assertEqual(len(self.file_changes), 15)
+
+	def test_selected_changes(self):
+		changes = [c['changes'] for c in self.file_changes if c['header'].new_path=='app/controllers/work_days_controller.rb'].pop()
+		actual = [
+			{'end': 16, 'start': 11, 'type': 'delete'},
+			{'end': 24, 'start': 11, 'type': 'insert'},
+			{'end': 20, 'start': 19, 'type': 'delete'},
+			{'end': 27, 'start': 27, 'type': 'insert'},
+			{'end': 32, 'start': 32, 'type': 'insert'},
+			{'end': 37, 'start': 37, 'type': 'insert'},
+			{'end': 59, 'start': 59, 'type': 'delete'},
+			{'end': 68, 'start': 68, 'type': 'insert'},
+			{'end': 76, 'start': 73, 'type': 'delete'},
+			{'end': 78, 'start': 78, 'type': 'delete'},
+			{'end': 83, 'start': 83, 'type': 'insert'}
+		]
+		self.assertCountEqual(actual, changes)
+
 if __name__ == '__main__':
 	unittest.main()
