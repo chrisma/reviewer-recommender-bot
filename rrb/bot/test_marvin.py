@@ -50,6 +50,31 @@ class TestDiffAppendedLine(MarvinTest):
 		actual = [{'start': self.line_number, 'end': self.line_number, 'type': 'insert'}]
 		self.assertCountEqual(actual, changes)
 
+class TestDiffMultipleAppendedLines(MarvinTest):
+	def setUp(self):
+		self.file_changes = self.marvin.analyze_diff(self.read('multiple_appends.diff'))
+
+	def test_amount(self):
+		self.assertEqual(len(self.file_changes), 2)
+
+	def test_header(self):
+		headers_old_paths = [change['header'].old_path for change in self.file_changes]
+		self.assertCountEqual(['Gemfile', 'README.md'], headers_old_paths)
+		headers_new_paths = [change['header'].new_path for change in self.file_changes]
+		self.assertCountEqual(['Gemfile', 'README.md'], headers_new_paths)
+
+	def test_change_file1(self):
+		file1_changes = [c['changes'] for c in self.file_changes if c['header'].new_path=='Gemfile'].pop()
+		# lines 117 to 125 appended
+		file1_actual = [{'start': 117, 'end': 125, 'type': 'insert'}]
+		self.assertCountEqual(file1_actual, file1_changes)
+
+	def test_change_file2(self):
+		file2_changes = [c['changes'] for c in self.file_changes if c['header'].new_path=='README.md'].pop()
+		# lines 115 to 127 appended
+		file2_actual = [{'start': 115, 'end': 127, 'type': 'insert'}]
+		self.assertCountEqual(file2_actual, file2_changes)
+
 class TestDiffPrependedLine(MarvinTest):
 	def setUp(self):
 		self.file_changes = self.marvin.analyze_diff(self.read('prepend.diff'))
