@@ -98,14 +98,23 @@ class TestDiffMultipleEdits(MarvinTest):
 		self.assertEqual(header.old_path, 'Gemfile')
 		self.assertEqual(header.new_path, 'Gemfile')
 
-	def test_changes(self):
+	def test_prepend(self):
 		changes = self.file_changes[0]['changes']
-		# line 1 prepended, line 58 (now 59) modified, lines 118, 119 appended.
-		actual = [	{'start': 1, 'end': 1, 'type': 'insert'},
-					{'start': 58, 'end': 58, 'type': 'delete'},
-					{'start': 59, 'end': 59, 'type': 'insert'},
-					{'start': 118, 'end': 119, 'type': 'insert'}]
-		self.assertCountEqual(actual, changes)
+		# line 1 prepended
+		self.assertIn({'start': 1, 'end': 1, 'type': 'insert'}, changes)
+
+	def test_modify(self):
+		changes = self.file_changes[0]['changes']
+		#line 58 (now 59) modified
+		actual = [	{'start': 58, 'end': 58, 'type': 'delete'},
+					{'start': 59, 'end': 59, 'type': 'insert'}]
+		for elem in actual:
+			self.assertIn(elem, changes)
+
+	def test_append(self):
+		changes = self.file_changes[0]['changes']
+		#lines 118, 119 appended.
+		self.assertIn({'start': 118, 'end': 119, 'type': 'insert'}, changes)
 
 class TestDiffMultipleFiles(MarvinTest):
 	def setUp(self):
