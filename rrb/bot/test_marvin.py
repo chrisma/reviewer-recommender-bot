@@ -122,16 +122,18 @@ class TestDiffMultipleFiles(MarvinTest):
 
 	def test_changes(self):
 		file1_changes = [c['changes'] for c in self.file_changes if c['header'].new_path=='Gemfile'].pop()
-		file2_changes = [c['changes'] for c in self.file_changes if c['header'].new_path=='README.md'].pop()
-		# Inserted lines 25 and 26
-		file2_actual = [{'start': 25, 'end': 26, 'type': 'insert'}]
-		self.assertCountEqual(file2_actual, file2_changes)
 		# line 1 prepended, line 37 (now 38) and line 40 (now 41) modified
-		file2_actual = [{'start': 1, 'end': 1, 'type': 'insert'},
+		file1_actual = [{'start': 1, 'end': 1, 'type': 'insert'},
 					{'start': 37, 'end': 37, 'type': 'delete'},
 					{'start': 38, 'end': 38, 'type': 'insert'},
 					{'start': 40, 'end': 40, 'type': 'delete'},
 					{'start': 41, 'end': 41, 'type': 'insert'}]
+		self.assertCountEqual(file1_actual, file1_changes)
+
+		file2_changes = [c['changes'] for c in self.file_changes if c['header'].new_path=='README.md'].pop()
+		# Inserted lines 25 and 26
+		file2_actual = [{'start': 25, 'end': 26, 'type': 'insert'}]
+		self.assertCountEqual(file2_actual, file2_changes)
 
 if __name__ == '__main__':
 	unittest.main()
